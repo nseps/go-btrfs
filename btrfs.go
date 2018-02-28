@@ -9,8 +9,13 @@ package btrfs
 
 /*
 #include <stdlib.h>
+#include <dirent.h>
 #include <btrfs/ioctl.h>
 #include <btrfs/ctree.h>
+
+static void set_name_btrfs_ioctl_vol_args_v2(struct btrfs_ioctl_vol_args_v2* btrfs_struct, const char* value) {
+    snprintf(btrfs_struct->name, BTRFS_SUBVOL_NAME_MAX, "%s", value);
+}
 */
 import "C"
 
@@ -22,6 +27,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -70,11 +77,12 @@ func SubvolSnapshot(srcdirpath, dirpath, name string) error {
 
 	var args C.struct_btrfs_ioctl_vol_args_v2
 	args.fd = C.__s64(getDirFd(srcDir))
-	for i, c := range []byte(name) {
-		args.name[i] = C.char(c)
-	}
 
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, getDirFd(destDir), C.BTRFS_IOC_SNAP_CREATE_V2,
+	var cs = C.CString(name)
+	C.set_name_btrfs_ioctl_vol_args_v2(&args, cs)
+	C.free(unsafe.Pointer(cs))
+
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, getDirFd(destDir), C.BTRFS_IOC_SNAP_CREATE_V2,
 		uintptr(unsafe.Pointer(&args)))
 	if errno != 0 {
 		return fmt.Errorf("Failed to create btrfs snapshot: %v", errno.Error())
